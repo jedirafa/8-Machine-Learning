@@ -1,0 +1,123 @@
+---
+title: 'Assignment: Prediction Assignment Writeup'
+author: "Rafael Godinho"
+date: "11 de junho de 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1 - Title
+Assignment: Prediction Assignment Writeup
+
+## 2 - Summary
+ This project is the report from Machine Learning that the main goal is predict the manner in which they did the exercise. This is the "classe" variable in the training set.
+ 
+ 
+## 3 - Load base, library and some analyses
+```{r}
+library(knitr)
+library(caret)
+library(rpart)
+library(rpart.plot)
+
+library(randomForest)
+library(corrplot)
+set.seed(2808)
+
+#Downloading data
+if (!file.exists("./data")) {
+  dir.create("./data")
+}
+if (!file.exists("./data/pml-training.csv")) {
+  url.training <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+  download.file(url.training, destfile = "./data/pml-training.csv")
+}
+
+if (!file.exists("./data/pml-testing.csv")) {
+  url.testing <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+  download.file(url.testing, destfile = "./data/pml-testing.csv")
+}
+
+training <- read.csv("./data/pml-training.csv")
+testing  <- read.csv("./data/pml-testing.csv")
+
+# create a partition using caret with the training dataset on 70,30 ratio
+inTrain  <- createDataPartition(training$classe, p=0.7, list=FALSE)
+TrainSet <- training[inTrain, ]
+TestSet  <- training[-inTrain, ]
+
+dim(TrainSet)
+dim(TestSet)
+
+```
+This 2 datasets have 160 variables. To proceed its necessary remove the near zero variance variables.
+
+```{r}
+# remove variables with Nearly Zero Variance
+NZV <- nearZeroVar(TrainSet)
+TrainSet <- TrainSet[, -NZV]
+TestSet  <- TestSet[, -NZV]
+
+# remove variables that are mostly NA
+AllNA    <- sapply(TrainSet, function(x) mean(is.na(x))) > 0.95
+TrainSet <- TrainSet[, AllNA==FALSE]
+TestSet  <- TestSet[, AllNA==FALSE]
+
+# remove identification only variables (columns 1 to 5)
+TrainSet <- TrainSet[, -(1:5)]
+TestSet  <- TestSet[, -(1:5)]
+
+dim(TrainSet)
+
+```
+
+After cleaning, the number of variables for the analysis are now only 54.
+
+
+## 4 - Data Prediction and Modelling
+I will use the two  methods to model the regressions (in the Train dataset) and the best one (with higher accuracy when applied to the Test dataset) will be used for the quiz predictions. The methods are: Random Forests and Generalized Boosted Model, as described below. 
+
+### 4.1 - Random Forest
+
+```{r}
+controlRF <- trainControl(method="cv", number=3, verboseIter=FALSE)
+modFitRandForest <- train(classe ~ ., data=TrainSet, method="rf",
+                          trControl=controlRF)
+modFitRandForest$finalModel
+
+# prediction on Test dataset
+predictRandForest <- predict(modFitRandForest, newdata=TestSet)
+confMatRandForest <- confusionMatrix(predictRandForest, TestSet$classe)
+confMatRandForest
+
+```
+
+### 4.2 - Generalized Boosted Model (GBM)
+
+```{r}
+controlGBM <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+modFitGBM  <- train(classe ~ ., data=TrainSet, method = "gbm",
+                    trControl = controlGBM, verbose = FALSE)
+
+# prediction on Test dataset
+predictGBM <- predict(modFitGBM, newdata=TestSet)
+confMatGBM <- confusionMatrix(predictGBM, TestSet$classe)
+confMatGBM
+
+```
+
+### 4.2 - Select the Best Model
+Random Forests Accuracy: 0.9969
+Generalized Boosted Model Accuracy: 0.9874 
+
+AS we can see, Random Forest have the higher accuracy.
+
+```{r}
+predictTEST <- predict(modFitRandForest, newdata=testing)
+
+# show the results for the 20 Quiz.
+predictTEST
+```
